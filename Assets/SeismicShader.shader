@@ -13,7 +13,10 @@ Shader "Unlit/SeismicShader"
 
         Pass
         {
+            Cull Off
+
             CGPROGRAM
+
             #pragma vertex vert
             #pragma fragment frag
 
@@ -32,12 +35,14 @@ Shader "Unlit/SeismicShader"
                 float4 vertex : SV_POSITION;
             };
 
+            #define MAX_WAVES 20
 
             sampler2D _MainTex;
             float4 _MainTex_ST;
             float4 _MainColor, _SecondaryColor;
-            float3 _SeismicCenter[5];
-            float _Timer[5];
+            float3 _SeismicCenter[MAX_WAVES];
+            float _Timer[MAX_WAVES];
+            float _Range;
             int _Active;
 
             v2f vert (appdata v)
@@ -58,10 +63,11 @@ Shader "Unlit/SeismicShader"
                     float distance = length(center - i.worldPos);
                     float t = abs(distance - _Timer[j]) * 8;// / (distance);
                     float4 nextColor = lerp(_SecondaryColor, _MainColor, saturate(t));
-                    nextColor /= (distance * 2 + 1);
+                    nextColor /= (distance * _Range + 1);
                     col = max(col, nextColor);
                 }
                 col = saturate(col);
+                if(col.x < 0.02f) discard;
                 return col;
             }
             ENDCG
