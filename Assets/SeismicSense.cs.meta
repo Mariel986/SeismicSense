@@ -1,0 +1,13 @@
+fileFormatVersion: 2
+guid: 541c769a10359f54d92cb8e5c920ad8c
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - seismicShader: {fileID: 4800000, guid: a56a341879b23204bb5d28f531767462, type: 3}
+  - seismicMaterial: {fileID: 2100000, guid: 5ea3e47153def8d4ba36cfe18d939a45, type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
