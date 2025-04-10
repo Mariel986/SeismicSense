@@ -539,9 +539,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   seismicShader: {fileID: 4800000, guid: a56a341879b23204bb5d28f531767462, type: 3}
   seismicMaterial: {fileID: 2100000, guid: 5ea3e47153def8d4ba36cfe18d939a45, type: 2}
-  timeLimit: 10
-  range: 10
-  width: 0.2
+  waveTimeLimit: 10
+  waveRange: 10
+  waveWidth: 0.07
+  waveColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
 --- !u!1 &2090122020
 GameObject:
   m_ObjectHideFlags: 0

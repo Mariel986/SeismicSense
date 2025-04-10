@@ -2,9 +2,7 @@ Shader "Unlit/SeismicShader"
 {
     Properties
     {
-        //_MainTex ("Texture", 2D) = "white" {}
         _MainColor ("Main Color", Color) = (.25, .5, .5, 1)
-        _SecondaryColor ("Main Color", Color) = (.25, .5, .5, 1)
     }
     SubShader
     {
@@ -39,10 +37,10 @@ Shader "Unlit/SeismicShader"
 
             sampler2D _MainTex;
             float4 _MainTex_ST;
-            float4 _MainColor, _SecondaryColor;
+            float4 _MainColor, _WaveColor[MAX_WAVES];
             float3 _SeismicCenter[MAX_WAVES];
-            float _Timer[MAX_WAVES];
-            float _Range, _TimeLimit, _Width;
+            float _TimeLimit;
+            float _Range[MAX_WAVES], _Width[MAX_WAVES], _Timer[MAX_WAVES];
             int _Active;
 
             v2f vert (appdata v)
@@ -62,16 +60,16 @@ Shader "Unlit/SeismicShader"
                 for(int j = 0; j < _Active; j++) {
                     float3 center = _SeismicCenter[j];
                     float distance = length(center - i.worldPos);
-                    float normalDistance = distance / _Range;
+                    float normalDistance = distance / _Range[j];
                     float normalTime = _Timer[j] / _TimeLimit;
 
                     float dt = normalTime - normalDistance;
-                    float width = _Width / _Range;
+                    float width = _Width[j] / _Range[j];
                     float left = smoothstep( (peakoffset - lowerOffset) * width , peakoffset * width, dt);
                     float right = 1 - smoothstep(peakoffset * width, (peakoffset + upperoffset) * width, dt);
                     float t = left * right;
 
-                    float4 nextColor = lerp(_MainColor, _SecondaryColor * (1 - normalTime), t);
+                    float4 nextColor = lerp(_MainColor, _WaveColor[j] * (1 - normalTime), t);
                     col = col + nextColor;
                 }
                 col = saturate(col);
