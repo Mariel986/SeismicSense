@@ -15,6 +15,10 @@ Shader "Unlit/SeismicShader"
 
             CGPROGRAM
 
+            #pragma target 3.0
+
+            #pragma shader_feature _ SEISMIC_TRANSPARENT
+
             #pragma vertex vert
             #pragma fragment frag
 
@@ -73,7 +77,9 @@ Shader "Unlit/SeismicShader"
                     col = col + nextColor;
                 }
                 col = saturate(col);
-                //if(col.x < 0.02f) discard;
+                #if defined(SEISMIC_TRANSPARENT)
+                    if(col.x < 0.02f) discard;
+                #endif
                 return col;
             }
             ENDCG

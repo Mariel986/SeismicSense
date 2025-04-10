@@ -7,8 +7,9 @@ public class SeismicSense : MonoBehaviour
     public Shader seismicShader;
 
     public Material seismicMaterial;
-    [Range(0.1f, 20f)]
     [Header("Global Settings")]
+    public bool transparent = false;
+    [Range(0.1f, 20f)]
     public float waveTimeLimit = 10f;
     [Range(0.01f, 50f)]
     [Header("Per Wave Settings")]
@@ -101,6 +102,12 @@ public class SeismicSense : MonoBehaviour
             seismicMaterial.SetVectorArray("_SeismicCenter", _seismicCenter);
             seismicMaterial.SetVectorArray("_WaveColor", _colors);
         }
+    }
+
+    void OnValidate()
+    {
+        if(transparent) seismicMaterial.EnableKeyword("SEISMIC_TRANSPARENT");
+        else seismicMaterial.DisableKeyword("SEISMIC_TRANSPARENT");
     }
 
     void OnDisable()
