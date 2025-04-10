@@ -42,7 +42,7 @@ Shader "Unlit/SeismicShader"
             float4 _MainColor, _SecondaryColor;
             float3 _SeismicCenter[MAX_WAVES];
             float _Timer[MAX_WAVES];
-            float _Range;
+            float _Range, _TimeLimit, _Width;
             int _Active;
 
             v2f vert (appdata v)
@@ -57,17 +57,25 @@ Shader "Unlit/SeismicShader"
             float4 frag (v2f i) : SV_Target
             {
                 float4 col = _MainColor;
+                float lowerOffset = 0.2f, peakoffset = 0.5f, upperoffset = 0.5f;
 
                 for(int j = 0; j < _Active; j++) {
                     float3 center = _SeismicCenter[j];
                     float distance = length(center - i.worldPos);
-                    float t = abs(distance - _Timer[j]) * 8;// / (distance);
-                    float4 nextColor = lerp(_SecondaryColor, _MainColor, saturate(t));
-                    nextColor /= (distance * _Range + 1);
-                    col = max(col, nextColor);
+                    float normalDistance = distance / _Range;
+                    float normalTime = _Timer[j] / _TimeLimit;
+
+                    float dt = normalTime - normalDistance;
+                    float width = _Width / _Range;
+                    float left = smoothstep( (peakoffset - lowerOffset) * width , peakoffset * width, dt);
+                    float right = 1 - smoothstep(peakoffset * width, (peakoffset + upperoffset) * width, dt);
+                    float t = left * right;
+
+                    float4 nextColor = lerp(_MainColor, _SecondaryColor * (1 - normalTime), t);
+                    col = col + nextColor;
                 }
                 col = saturate(col);
-                if(col.x < 0.02f) discard;
+                //if(col.x < 0.02f) discard;
                 return col;
             }
             ENDCG

@@ -6,10 +6,12 @@ public class SeismicSense : MonoBehaviour
     public Shader seismicShader;
 
     public Material seismicMaterial;
-    public float speed = 1f;
+    [Range(0.1f, 20f)]
     public float timeLimit = 10f;
-    [Range(0f, 10f)]
+    [Range(0.01f, 50f)]
     public float range = 2f;
+    [Range(0.001f, 1f)]
+    public float width = 1f/50f;
 
     private List<float> _timer;
     private List<Vector4> _seismicCenter;
@@ -60,7 +62,7 @@ public class SeismicSense : MonoBehaviour
     {
         for(int i = 0; i < _timer.Count; i++)
         {
-            _timer[i] += Time.deltaTime * speed;
+            _timer[i] += Time.deltaTime;
         }
 
         if(_active > 0 && _timer[_active - 1] > timeLimit)
@@ -70,6 +72,8 @@ public class SeismicSense : MonoBehaviour
 
         seismicMaterial.SetInt("_Active", _active);
         seismicMaterial.SetFloat("_Range",range);
+        seismicMaterial.SetFloat("_Width",width);
+        seismicMaterial.SetFloat("_TimeLimit",timeLimit);
         if(_active > 0)
         {
             seismicMaterial.SetFloatArray("_Timer", _timer);
