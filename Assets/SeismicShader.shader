@@ -12,12 +12,13 @@ Shader "Unlit/SeismicShader"
         Pass
         {
             Cull Off
-
+ 
             CGPROGRAM
 
             #pragma target 3.0
 
             #pragma shader_feature _ SEISMIC_TRANSPARENT
+            #pragma shader_feature _ SEISMIC_DISPLACEMENT
 
             #pragma vertex vert
             #pragma fragment frag
@@ -27,14 +28,18 @@ Shader "Unlit/SeismicShader"
             struct appdata
             {
                 float4 vertex : POSITION;
+                float3 normal : NORMAL;
                 float2 uv : TEXCOORD0;
             };
 
             struct v2f
             {
+                float4 vertex : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float3 worldPos : TEXCOORD1;
-                float4 vertex : SV_POSITION;
+                #if defined(SEISMIC_DISPLACEMENT)
+                    float3 offset : TEXCOORD2;
+                #endif
             };
 
             #define MAX_WAVES 20
@@ -47,9 +52,34 @@ Shader "Unlit/SeismicShader"
             float _Range[MAX_WAVES], _Width[MAX_WAVES], _Timer[MAX_WAVES];
             int _Active;
 
+            float _Height[MAX_WAVES];
+
             v2f vert (appdata v)
             {
                 v2f o;
+
+                #if defined(SEISMIC_DISPLACEMENT)
+                    float height;
+                    float lowerOffset = 0.2f, peakoffset = 0.5f, upperoffset = 0.5f;
+
+                    for(int j = 0; j < _Active; j++) {
+                        float normalDistance = length(_SeismicCenter[j] - mul(unity_ObjectToWorld, v.vertex).xyz) / _Range[j];
+                        float normalTime = _Timer[j] / _TimeLimit;
+
+                        float dt = normalTime - normalDistance;
+                        float width = _Width[j] / _Range[j];
+                        float left = smoothstep( (peakoffset - lowerOffset) * width , peakoffset * width, dt);
+                        float right = 1 - smoothstep(peakoffset * width, (peakoffset + upperoffset) * width, dt);
+                        float t = left * right;
+
+                        height = height + (1 - normalTime) * t * _Height[j];
+                    }
+                    height = saturate(height);
+                    float3 offset = float3(v.normal * height);
+                    v.vertex.xyz += offset;
+                    o.offset = offset;
+                #endif
+
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex);
@@ -62,9 +92,12 @@ Shader "Unlit/SeismicShader"
                 float lowerOffset = 0.2f, peakoffset = 0.5f, upperoffset = 0.5f;
 
                 for(int j = 0; j < _Active; j++) {
-                    float3 center = _SeismicCenter[j];
-                    float distance = length(center - i.worldPos);
-                    float normalDistance = distance / _Range[j];
+                    
+                    #if defined(SEISMIC_DISPLACEMENT)
+                        float normalDistance = length(_SeismicCenter[j] - (i.worldPos - i.offset)) / _Range[j];
+                    #else
+                        float normalDistance = length(_SeismicCenter[j] - (i.worldPos)) / _Range[j];
+                    #endif
                     float normalTime = _Timer[j] / _TimeLimit;
 
                     float dt = normalTime - normalDistance;
