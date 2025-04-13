@@ -543,7 +543,7 @@ MonoBehaviour:
   displacement: 0
   waveTimeLimit: 10
   waveRange: 10
-  waveWidth: 0.937
+  waveWidth: 0.109
   waveColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   waveHeight: 0.0001
 --- !u!1 &2090122020

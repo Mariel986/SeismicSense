@@ -61,6 +61,7 @@ Shader "Unlit/SeismicShader"
                 #if defined(SEISMIC_DISPLACEMENT)
                     float height;
                     float lowerOffset = 0.2f, peakoffset = 0.5f, upperoffset = 0.5f;
+                    
 
                     for(int j = 0; j < _Active; j++) {
                         float normalDistance = length(_SeismicCenter[j] - mul(unity_ObjectToWorld, v.vertex).xyz) / _Range[j];
@@ -74,9 +75,16 @@ Shader "Unlit/SeismicShader"
 
                         height = height + (1 - normalTime) * t * _Height[j];
                     }
-                    height = saturate(height);
-                    float3 offset = float3(v.normal * height);
+                    //height = saturate(height);
+
+                    // normal and vertecies to worldspace
+                    float3 worldNormal = UnityObjectToWorldNormal(v.normal);
+                    float3 offset = worldNormal * height;
+
+                    v.vertex = mul(unity_ObjectToWorld, v.vertex);
                     v.vertex.xyz += offset;
+                    v.vertex = mul(unity_WorldToObject, v.vertex);
+
                     o.offset = offset;
                 #endif
 
