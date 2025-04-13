@@ -98,7 +98,7 @@ Shader "Custom/TessellatedSurface"
                                         bary.y * patch[1].normal +
                                         bary.z * patch[2].normal);
 
-                o.position = TransformObjectToHClip(float4(pos, 1.0));
+                o.position = TransformObjectToHClip(pos);
                 o.normal = norm;
                 return o;
             }

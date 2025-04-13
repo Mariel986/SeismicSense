@@ -1,4 +1,4 @@
-Shader "Unlit/SeismicShader"
+Shader "Custom/SeismicShader"
 {
     Properties
     {
@@ -93,9 +93,9 @@ Shader "Unlit/SeismicShader"
                     o.offset = offset;
                 #endif
 
-                o.vertex = TransformObjectToHClip(v.vertex);
+                o.vertex = TransformObjectToHClip(v.vertex.xyz);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-                o.worldPos = mul(unity_ObjectToWorld, v.vertex);
+                o.worldPos = (float3)mul(unity_ObjectToWorld, v.vertex);
                 return o;
             }
 
