@@ -10,6 +10,7 @@ public class SeismicSense : MonoBehaviour
     [Header("Global Settings")]
     public bool transparent = false;
     public bool displacement = false;
+    public bool lighting = false;
     [Range(0.1f, 20f)]
     public float waveTimeLimit = 10f;
     [Range(0.01f, 50f)]
@@ -119,6 +120,9 @@ public class SeismicSense : MonoBehaviour
         
         if(displacement) seismicMaterial.EnableKeyword("SEISMIC_DISPLACEMENT");
         else seismicMaterial.DisableKeyword("SEISMIC_DISPLACEMENT");
+
+        if(lighting) seismicMaterial.EnableKeyword("SEISMIC_LIGHTING");
+        else seismicMaterial.DisableKeyword("SEISMIC_LIGHTING");
     }
 
     void OnDisable()

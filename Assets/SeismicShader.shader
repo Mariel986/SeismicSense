@@ -1,14 +1,16 @@
 Shader "Custom/SeismicShader"
 {
     Properties
-    {
-        _MainColor ("Main Color", Color) = (.25, .5, .5, 1)
+    {        
+        _Color ("Color", Color) = (1,1,1,1)
+        _MainTex ("Albedo (RGB)", 2D) = "white" {}
         _TessellationFactor ("Tessellation Factor", Range(1, 64)) = 8
     }
     SubShader
     {
         Tags { 
             "RenderType"="Opaque" 
+            "Queue"="Geometry"
             "RenderPipeline" = "UniversalPipeline"
         }
         LOD 100
@@ -20,9 +22,13 @@ Shader "Custom/SeismicShader"
             HLSLPROGRAM 
 
             #pragma target 5.0
+            
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS_CASCADE
 
             #pragma shader_feature _ SEISMIC_TRANSPARENT
             #pragma shader_feature _ SEISMIC_DISPLACEMENT
+            #pragma shader_feature _ SEISMIC_LIGHTING
 
             #pragma vertex vert
             #pragma hull hull
@@ -30,98 +36,8 @@ Shader "Custom/SeismicShader"
             #pragma fragment frag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-
-            struct Appdata
-            {
-                float4 vertex : POSITION;
-                float3 normal : NORMAL;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct ControlPoint
-            {
-                float4 vertex : POSITION;
-                float3 normal : NORMAL;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct PatchConstant
-            {
-                float TessFactor[3] : SV_TESSFACTOR;
-                float InsideTess : SV_INSIDETESSFACTOR;
-            };
-
-            struct Interpolators
-            {
-                float4 vertex : SV_POSITION;
-                float2 uv : TEXCOORD0;
-                float3 worldPos : TEXCOORD1;
-                float3 offset : TEXCOORD2;
-                float3 normal : TEXCOORD3;
-            };
-
-            #define MAX_WAVES 20
-
-            CBUFFER_START(UnityPerMaterial)
-                sampler2D _MainTex;
-                float4 _MainTex_ST;
-                float4 _MainColor, _WaveColor[MAX_WAVES];
-                float3 _SeismicCenter[MAX_WAVES];
-                float _TimeLimit;
-                float _Range[MAX_WAVES], _Width[MAX_WAVES], _Timer[MAX_WAVES];
-                int _Active;
-
-                float _Height[MAX_WAVES];
-                int _TessellationFactor;
-            CBUFFER_END
-
-            ControlPoint vert(Appdata v) 
-            {
-                ControlPoint o;
-                o.vertex = v.vertex;
-                o.normal = v.normal;
-                o.uv = v.uv;
-                return o;
-            }
-            [domain("tri")]
-            [partitioning("integer")]
-            [outputtopology("triangle_cw")]
-            [outputcontrolpoints(3)]
-            [patchconstantfunc("PatchConstants")]
-            ControlPoint hull(InputPatch<ControlPoint, 3> patch, uint i : SV_OUTPUTCONTROLPOINTID)
-            {
-                return patch[i];
-            }
-
-            PatchConstant PatchConstants(InputPatch<ControlPoint, 3> patch)
-            {
-                PatchConstant p;
-                p.TessFactor[0] = _TessellationFactor;
-                p.TessFactor[1] = _TessellationFactor;
-                p.TessFactor[2] = _TessellationFactor;
-                p.InsideTess = _TessellationFactor;
-                return p;
-            }
-
-            float GetWaveOffsetAt(float3 samplePos)
-            {
-                float h = 0;
-                for (int j = 0; j < _Active; j++)
-                {
-                    float dNorm = length(_SeismicCenter[j] - samplePos) / _Range[j];
-                    float tNorm = _Timer[j] / _TimeLimit;
-                    float dt = tNorm - dNorm;
-                    float width = _Width[j] / _Range[j];
-
-                    float lowerOffset = 0.2f, peakOffset = 0.5f, upperOffset = 0.5f;
-                    float l = smoothstep((peakOffset - lowerOffset) * width, peakOffset * width, dt);
-                    float r = 1 - smoothstep(peakOffset * width, (peakOffset + upperOffset) * width, dt);
-                    float t = l * r;
-
-                    h += (1 - tNorm) * t * _Height[j];
-                }
-                return h;
-            }
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Seismic.hlsl"
 
             [domain("tri")]
             Interpolators domain(PatchConstant p, const OutputPatch<ControlPoint, 3> patch, float3 bary : SV_DomainLocation)
@@ -172,11 +88,13 @@ Shader "Custom/SeismicShader"
                     float3 worldPos = TransformObjectToWorld(pos);
                     o.vertex = TransformWorldToHClip(worldPos);
                     o.offset = float3(0, 0, 0);
-                    o.normal = norm;
+                    o.normal = TransformObjectToWorldNormal(norm);
                     o.worldPos = worldPos;
                 #endif
 
                 o.uv = TRANSFORM_TEX(uv, _MainTex);
+                o.shadowCoord = TransformWorldToShadowCoord(o.worldPos);
+
                 return o;
             }
 
@@ -187,11 +105,7 @@ Shader "Custom/SeismicShader"
 
                 for(int j = 0; j < _Active; j++) {
                     
-                    #if defined(SEISMIC_DISPLACEMENT)
-                        float normalDistance = length(_SeismicCenter[j] - (i.worldPos - i.offset)) / _Range[j];
-                    #else
-                        float normalDistance = length(_SeismicCenter[j] - (i.worldPos)) / _Range[j];
-                    #endif
+                    float normalDistance = length(_SeismicCenter[j] - (i.worldPos - i.offset)) / _Range[j];
                     float normalTime = _Timer[j] / _TimeLimit;
 
                     float dt = normalTime - normalDistance;
@@ -200,18 +114,98 @@ Shader "Custom/SeismicShader"
                     float right = 1 - smoothstep(peakoffset * width, (peakoffset + upperoffset) * width, dt);
                     float t = left * right;
 
-                    float4 nextColor = lerp(_MainColor, _WaveColor[j] * (1 - normalTime), t);
+                    float4 nextColor = lerp(_Color, _WaveColor[j] * (1 - normalTime), t);
                     col = col + nextColor;
                 }
                 col = saturate(col);
-                #if defined(SEISMIC_TRANSPARENT)
-                    if(col.x < 0.02f) discard;
+
+
+
+                #if defined(SEISMIC_LIGHTING)
+                    // Lighting
+                    Light mainLight = GetMainLight();
+
+                    float3 lightDir = normalize(mainLight.direction);
+                    float NdotL = dot(normalize(i.normal), lightDir);
+                    float halfLambert = NdotL * 0.5 + 0.5;
+
+                    float3 surfaceColor = tex2D(_MainTex, i.uv).rgb;
+                    half shadow = MainLightRealtimeShadow(i.shadowCoord);
+                    //half shadow = 1;
+
+                    float3 litColor = surfaceColor * _MainLightColor.rgb * halfLambert * shadow;
+                    return float4(litColor, col.a);
+                #else
+                    #if defined(SEISMIC_TRANSPARENT)
+                        if(col.a < 0.02f) discard;
+                    #endif
+                    return col;
                 #endif
-                return col;    
                 //return float4(i.normal * 0.5f + 0.5f, 1.0f);   
 
             }
             ENDHLSL
         }
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags { "LightMode" = "ShadowCaster" }
+
+            Cull Off
+
+            HLSLPROGRAM
+            #pragma target 5.0
+
+            #pragma vertex vert
+            #pragma hull hull
+            #pragma domain domainShadow
+            #pragma fragment fragShadow
+
+            #pragma shader_feature _ SEISMIC_DISPLACEMENT
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            #include "Seismic.hlsl"
+
+            struct ShadowVaryings
+            {
+                float4 positionCS : SV_POSITION;
+            };
+
+            [domain("tri")]
+            ShadowVaryings domainShadow(PatchConstant p, const OutputPatch<ControlPoint, 3> patch, float3 bary : SV_DomainLocation)
+            {
+                ShadowVaryings o;
+
+                float3 pos = bary.x * patch[0].vertex.xyz +
+                            bary.y * patch[1].vertex.xyz +
+                            bary.z * patch[2].vertex.xyz;
+
+                float3 worldPos = TransformObjectToWorld(pos);
+
+                #if defined(SEISMIC_DISPLACEMENT)
+                    float3 normal = normalize(
+                        bary.x * patch[0].normal +
+                        bary.y * patch[1].normal +
+                        bary.z * patch[2].normal
+                    );
+                    float3 worldNormal = TransformObjectToWorldNormal(normal);
+                    float height = GetWaveOffsetAt(worldPos);
+                    worldPos += worldNormal * height;
+                #endif
+
+                o.positionCS = TransformWorldToHClip(worldPos);
+                return o;
+            }
+
+            float4 fragShadow(ShadowVaryings i) : SV_Target
+            {
+                return 0;
+            }
+
+            ENDHLSL
+        }
+
     }
 }
