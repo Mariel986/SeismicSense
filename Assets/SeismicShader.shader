@@ -130,8 +130,8 @@ Shader "Custom/SeismicShader"
                     float halfLambert = NdotL * 0.5 + 0.5;
 
                     float3 surfaceColor = tex2D(_MainTex, i.uv).rgb;
-                    half shadow = MainLightRealtimeShadow(i.shadowCoord);
-                    //half shadow = 1;
+                    //half shadow = MainLightRealtimeShadow(i.shadowCoord);
+                    half shadow = 1;
 
                     float3 litColor = surfaceColor * _MainLightColor.rgb * halfLambert * shadow;
                     return float4(litColor, col.a);
