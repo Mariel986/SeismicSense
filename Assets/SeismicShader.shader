@@ -6,16 +6,19 @@ Shader "Unlit/SeismicShader"
     }
     SubShader
     {
-        Tags { "RenderType"="Opaque" }
+        Tags { 
+            "RenderType"="Opaque" 
+            "RenderPipeline" = "UniversalPipeline"
+        }
         LOD 100
 
         Pass
         {
             Cull Off
  
-            CGPROGRAM
+            HLSLPROGRAM 
 
-            #pragma target 3.0
+            #pragma target 5.0
 
             #pragma shader_feature _ SEISMIC_TRANSPARENT
             #pragma shader_feature _ SEISMIC_DISPLACEMENT
@@ -23,16 +26,16 @@ Shader "Unlit/SeismicShader"
             #pragma vertex vert
             #pragma fragment frag
 
-            #include "UnityCG.cginc"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            struct appdata
+            struct vertexData
             {
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
                 float2 uv : TEXCOORD0;
             };
 
-            struct v2f
+            struct Interpolators
             {
                 float4 vertex : SV_POSITION;
                 float2 uv : TEXCOORD0;
@@ -44,19 +47,21 @@ Shader "Unlit/SeismicShader"
 
             #define MAX_WAVES 20
 
-            sampler2D _MainTex;
-            float4 _MainTex_ST;
-            float4 _MainColor, _WaveColor[MAX_WAVES];
-            float3 _SeismicCenter[MAX_WAVES];
-            float _TimeLimit;
-            float _Range[MAX_WAVES], _Width[MAX_WAVES], _Timer[MAX_WAVES];
-            int _Active;
+            CBUFFER_START(UnityPerMaterial)
+                sampler2D _MainTex;
+                float4 _MainTex_ST;
+                float4 _MainColor, _WaveColor[MAX_WAVES];
+                float3 _SeismicCenter[MAX_WAVES];
+                float _TimeLimit;
+                float _Range[MAX_WAVES], _Width[MAX_WAVES], _Timer[MAX_WAVES];
+                int _Active;
 
-            float _Height[MAX_WAVES];
+                float _Height[MAX_WAVES];
+            CBUFFER_END
 
-            v2f vert (appdata v)
+            Interpolators vert (vertexData v)
             {
-                v2f o;
+                Interpolators o;
 
                 #if defined(SEISMIC_DISPLACEMENT)
                     float height;
@@ -78,7 +83,7 @@ Shader "Unlit/SeismicShader"
                     //height = saturate(height);
 
                     // normal and vertecies to worldspace
-                    float3 worldNormal = UnityObjectToWorldNormal(v.normal);
+                    float3 worldNormal = mul((float3x3)unity_ObjectToWorld,v.normal);
                     float3 offset = worldNormal * height;
 
                     v.vertex = mul(unity_ObjectToWorld, v.vertex);
@@ -88,13 +93,13 @@ Shader "Unlit/SeismicShader"
                     o.offset = offset;
                 #endif
 
-                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.vertex = TransformObjectToHClip(v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex);
                 return o;
             }
 
-            float4 frag (v2f i) : SV_Target
+            float4 frag (Interpolators i) : SV_Target
             {
                 float4 col = _MainColor;
                 float lowerOffset = 0.2f, peakoffset = 0.5f, upperoffset = 0.5f;
@@ -123,7 +128,7 @@ Shader "Unlit/SeismicShader"
                 #endif
                 return col;
             }
-            ENDCG
+            ENDHLSL
         }
     }
 }
