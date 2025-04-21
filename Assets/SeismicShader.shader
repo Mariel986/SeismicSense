@@ -59,27 +59,23 @@ Shader "Custom/SeismicShader"
                     bary.z * patch[2].uv;
 
                 #if defined(SEISMIC_DISPLACEMENT)
-                    float3 worldPos = TransformObjectToWorld(pos);
+                    float3 samplePos = TransformObjectToWorld(pos);
                     float3 worldNormal = TransformObjectToWorldNormal(norm);
 
-                    float height = GetWaveOffsetAt(worldPos);
+                    float height = GetWaveOffsetAt(samplePos);
                     float3 offset = worldNormal * height;
-                    worldPos += offset;
 
-                    o.vertex = TransformWorldToHClip(worldPos);
+                    o.worldPos = samplePos + offset;
+                    o.vertex = TransformWorldToHClip(o.worldPos);
                     o.offset = offset;
-                    o.worldPos = worldPos;
 
                     float eps = 0.01;
 
-                    float3 wpX = worldPos + float3(eps, 0, 0);
-                    float3 wpZ = worldPos + float3(0, 0, eps);
+                    float dispX = GetWaveOffsetAt(samplePos + float3(eps, 0, 0));
+                    float dispZ = GetWaveOffsetAt(samplePos + float3(0, 0, eps));
 
-                    float3 dispX = GetWaveOffsetAt(wpX);
-                    float3 dispZ = GetWaveOffsetAt(wpZ);
-
-                    float3 dx = normalize(float3(eps, dispX.y - offset.y, 0));
-                    float3 dz = normalize(float3(0, dispZ.y - offset.y, eps));
+                    float3 dx = float3(eps, dispX - height, 0);
+                    float3 dz = float3(0, dispZ - height, eps);
 
                     float3 recalculatedNormal = normalize(cross(dz, dx));
 
@@ -130,19 +126,18 @@ Shader "Custom/SeismicShader"
                     float halfLambert = NdotL * 0.5 + 0.5;
 
                     float3 surfaceColor = tex2D(_MainTex, i.uv).rgb;
-                    //half shadow = MainLightRealtimeShadow(i.shadowCoord);
-                    half shadow = 1;
+                    //float shadow = MainLightRealtimeShadow(i.shadowCoord);
+                    float shadow = 1.0f;
 
                     float3 litColor = surfaceColor * _MainLightColor.rgb * halfLambert * shadow;
                     return float4(litColor, col.a);
+                    //return float4(i.normal, 1.0f);  
                 #else
                     #if defined(SEISMIC_TRANSPARENT)
                         if(col.a < 0.02f) discard;
                     #endif
                     return col;
                 #endif
-                //return float4(i.normal * 0.5f + 0.5f, 1.0f);   
-
             }
             ENDHLSL
         }
