@@ -4,7 +4,7 @@ Shader "Custom/SeismicShader"
     {        
         _Color ("Color", Color) = (1,1,1,1)
         _MainTex ("Albedo (RGB)", 2D) = "white" {}
-        _TessellationFactor ("Tessellation Factor", Range(1, 64)) = 8
+        _TessellationFactor ("Tessellation Factor", Range(1, 128)) = 8
     }
     SubShader
     {
@@ -94,6 +94,27 @@ Shader "Custom/SeismicShader"
                 return o;
             }
 
+            /*float4 frag(Interpolators i) : SV_Target
+            {
+                float4 col = float4(0, 0, 0, 1);
+
+                for (int j = 0; j < _Active; j++)
+                {
+                    float dNorm = length(_SeismicCenter[j] - i.worldPos) / _Range[j];
+
+                    // Use fixed helper functions
+                    float inner = GetInnerNormalizedDistance(j);
+                    float outer = GetOuterNormalizedDistance(j);
+
+                    // Simple hard red band test
+                    if (dNorm >= inner && dNorm <= outer)
+                    {
+                        col.rgb += float3(1, 0, 0);
+                    }
+                }
+
+                return saturate(col);
+            }*/
             float4 frag (Interpolators i) : SV_Target
             {
                 float4 col = _MainColor;
