@@ -31,8 +31,12 @@ public class SeismicSense : MonoBehaviour
     private int _active = 0;
     private int _maxWaves = 20;
 
+    static public SeismicSense Instance;
+
     void OnEnable()
     {
+        Instance = this;
+        
         _timer = new List<float>();
         _ranges = new List<float>();
         _widths = new List<float>();
