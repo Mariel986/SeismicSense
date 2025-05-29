@@ -46,92 +46,101 @@ CBUFFER_START(UnityPerMaterial)
     float4 _Color;
 CBUFFER_END
 
-ControlPoint vert(Appdata v)
+// Utility: Interpolate from barycentric weights
+float3 BarycentricInterpolate(float3 a, float3 b, float3 c, float3 bary)
 {
-    ControlPoint o;
-    o.vertex = v.vertex;
-    o.normal = v.normal;
-    o.uv = v.uv;
-    return o;
+    return bary.x * a + bary.y * b + bary.z * c;
 }
 
-[domain("tri")]
-[partitioning("integer")]
-[outputtopology("triangle_cw")]
-[outputcontrolpoints(3)]
-[patchconstantfunc("PatchConstants")]
-ControlPoint hull(InputPatch<ControlPoint, 3> patch, uint i : SV_OutputControlPointID)
+float2 BarycentricInterpolate(float2 a, float2 b, float2 c, float3 bary)
 {
-    return patch[i];
+    return bary.x * a + bary.y * b + bary.z * c;
 }
 
-float GetInnerNormalizedDistance(int waveIndex)
+// Wave shape function
+float GetWaveContribution(int j, float3 pos)
 {
-    float normTime = _Timer[waveIndex] / _TimeLimit;
-    float width = _Width[waveIndex] / _Range[waveIndex];
-    float lowerOffset = 0.2f;
-    float peakOffset = 0.5f;
-    return (normTime - (peakOffset + lowerOffset) * width) * 0.9f;
+    float dNorm = length(_SeismicCenter[j] - pos) / _Range[j];
+    float tNorm = _Timer[j] / _TimeLimit;
+    float dt = tNorm - dNorm;
+    float width = _Width[j] / _Range[j];
+
+    float lowerOffset = 0.2f, peakOffset = 0.5f, upperOffset = 0.5f;
+    float l = smoothstep((peakOffset - lowerOffset) * width, peakOffset * width, dt);
+    float r = 1 - smoothstep(peakOffset * width, (peakOffset + upperOffset) * width, dt);
+    float t = l * r;
+
+    return (1 - tNorm) * t * _Height[j];
 }
 
-
-float GetOuterNormalizedDistance(int waveIndex)
+float GetWaveOffsetAt(float3 pos)
 {
-    float normTime = _Timer[waveIndex] / _TimeLimit;
-    float width = _Width[waveIndex] / _Range[waveIndex];
-    float peakOffset = 0.5f;
-    float upperOffset = 0.5f;
-    return normTime - (peakOffset - upperOffset) * width;
+    float h = 0;
+    for (int j = 0; j < _Active; ++j)
+    {
+        h += GetWaveContribution(j, pos);
+    }
+    return h;
+}
+
+float2 GetWaveGradientAt(float3 pos)
+{
+    float eps = 0.05;
+    float h = GetWaveOffsetAt(pos);
+    float hx = GetWaveOffsetAt(pos + float3(eps, 0, 0));
+    float hz = GetWaveOffsetAt(pos + float3(0, 0, eps));
+    return float2((hx - h) / eps, (hz - h) / eps);
+}
+
+// Tessellation helper
+float GetInnerNormalizedDistance(int j)
+{
+    float tNorm = _Timer[j] / _TimeLimit;
+    float width = _Width[j] / _Range[j];
+    return (tNorm - (0.5f + 0.2f) * width) * 0.9f;
+}
+
+float GetOuterNormalizedDistance(int j)
+{
+    float tNorm = _Timer[j] / _TimeLimit;
+    float width = _Width[j] / _Range[j];
+    return tNorm - (0.5f - 0.5f) * width;
 }
 
 bool SegmentIntersectsCircle(float3 a, float3 b, float3 center, float rNorm, float range)
 {
     float radius = rNorm * range;
-
     float3 ab = b - a;
     float3 ac = center - a;
-
     float t = saturate(dot(ac, ab) / dot(ab, ab));
     float3 closest = a + t * ab;
+    float distSqr = dot(closest - center, closest - center);
 
-    float distToCenterSqr = dot(closest - center, closest - center);
-    bool closestInside = distToCenterSqr < radius * radius;
-
-    float aDistSqr = dot(a - center, a - center);
-    float bDistSqr = dot(b - center, b - center);
-
-    bool aOutside = aDistSqr > radius * radius;
-    bool bOutside = bDistSqr > radius * radius;
-
-    return closestInside && (aOutside || bOutside);
+    bool aOutside = dot(a - center, a - center) > radius * radius;
+    bool bOutside = dot(b - center, b - center) > radius * radius;
+    return distSqr < radius * radius && (aOutside || bOutside);
 }
-
 
 PatchConstant PatchConstants(InputPatch<ControlPoint, 3> patch)
 {
     PatchConstant p;
     bool affected = false;
 
-    // Convert triangle vertices to world space
     float3 v[3];
-    for (int i = 0; i < 3; i++)
-    {
+    for (int i = 0; i < 3; ++i)
         v[i] = mul(unity_ObjectToWorld, float4(patch[i].vertex.xyz, 1.0)).xyz;
-    }
 
-    // Build triangle edges
     float3 edgeStart[3] = { v[0], v[1], v[2] };
     float3 edgeEnd[3]   = { v[1], v[2], v[0] };
 
-    for (int j = 0; j < _Active; j++)
+    for (int j = 0; j < _Active && !affected; ++j)
     {
         float3 center = _SeismicCenter[j];
         float range = _Range[j];
-
         float inner = GetInnerNormalizedDistance(j);
         float outer = GetOuterNormalizedDistance(j);
 
-        for (int e = 0; e < 3; e++)
+        for (int e = 0; e < 3; ++e)
         {
             if (SegmentIntersectsCircle(edgeStart[e], edgeEnd[e], center, inner, range) ||
                 SegmentIntersectsCircle(edgeStart[e], edgeEnd[e], center, outer, range))
@@ -140,38 +149,14 @@ PatchConstant PatchConstants(InputPatch<ControlPoint, 3> patch)
                 break;
             }
         }
-
-        if (affected)
-            break;
     }
 
-    float tess = affected ? _TessellationFactor : 1.0;
+    float tess = affected ? _TessellationFactor : 1.0f;
     p.TessFactor[0] = tess;
     p.TessFactor[1] = tess;
     p.TessFactor[2] = tess;
     p.InsideTess = tess;
-
     return p;
-}
-
-float GetWaveOffsetAt(float3 samplePos)
-{
-    float h = 0;
-    for (int j = 0; j < _Active; j++)
-    {
-        float dNorm = length(_SeismicCenter[j] - samplePos) / _Range[j];
-        float tNorm = _Timer[j] / _TimeLimit;
-        float dt = tNorm - dNorm;
-        float width = _Width[j] / _Range[j];
-
-        float lowerOffset = 0.2f, peakOffset = 0.5f, upperOffset = 0.5f;
-        float l = smoothstep((peakOffset - lowerOffset) * width, peakOffset * width, dt);
-        float r = 1 - smoothstep(peakOffset * width, (peakOffset + upperOffset) * width, dt);
-        float t = l * r;
-
-        h += (1 - tNorm) * t * _Height[j];
-    }
-    return h;
 }
 
 #endif
