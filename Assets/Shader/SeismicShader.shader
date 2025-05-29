@@ -4,7 +4,6 @@ Shader "Custom/SeismicShader"
     {        
         _Color ("Base Color", Color) = (1,1,1,1)
         _MainTex ("Albedo (RGB)", 2D) = "white" {}
-        _TessellationFactor ("Tessellation Factor", Range(1, 128)) = 8
     }
 
     SubShader
@@ -35,44 +34,19 @@ Shader "Custom/SeismicShader"
             #pragma shader_feature _ SEISMIC_LIGHTING
 
             #pragma vertex vert
-            #pragma hull hull
-            #pragma domain domain
             #pragma fragment frag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Seismic.hlsl"
 
-            ControlPoint vert(Appdata v)
-            {
-                ControlPoint o;
-                o.vertex = v.vertex;
-                o.normal = v.normal;
-                o.uv = v.uv;
-                return o;
-            }
-
-            [domain("tri")]
-            [partitioning("integer")]
-            [outputtopology("triangle_cw")]
-            [outputcontrolpoints(3)]
-            [patchconstantfunc("PatchConstants")]
-            ControlPoint hull(InputPatch<ControlPoint, 3> patch, uint i : SV_OutputControlPointID)
-            {
-                return patch[i];
-            }
-
-            [domain("tri")]
-            Interpolators domain(PatchConstant p, const OutputPatch<ControlPoint, 3> patch, float3 bary : SV_DomainLocation)
+            Interpolators vert(Appdata v)
             {
                 Interpolators o;
 
-                float3 pos = BarycentricInterpolate(
-                    patch[0].vertex.xyz, patch[1].vertex.xyz, patch[2].vertex.xyz, bary);
-                float3 normal = normalize(BarycentricInterpolate(
-                    patch[0].normal, patch[1].normal, patch[2].normal, bary));
-                float2 uv = BarycentricInterpolate(
-                    patch[0].uv, patch[1].uv, patch[2].uv, bary);
+                float3 pos = v.vertex.xyz;
+                float3 normal = normalize(v.normal);
+                float2 uv = v.uv;
 
                 float3 worldPos = TransformObjectToWorld(pos);
                 float3 worldNormal = normalize(TransformObjectToWorldNormal(normal));
@@ -123,8 +97,7 @@ Shader "Custom/SeismicShader"
                     float3 dZ = float3(0, grad.y, 1);
 
                     float3 slopeNormal = normalize(cross(dZ, dX));
-                    float3 normal = normalize(lerp(i.normal, slopeNormal, 0.85)); // Blend with geometric normal
-
+                    float3 normal = normalize(lerp(i.normal, slopeNormal, 0.85));
 
                     float3 lightDir = normalize(GetMainLight().direction);
                     float NdotL = max(0.0, dot(normal, lightDir));
@@ -133,7 +106,7 @@ Shader "Custom/SeismicShader"
                     float3 surfaceColor = tex2D(_MainTex, i.uv).rgb;
                     float4 shadowCoord = TransformWorldToShadowCoord(i.worldPos);
                     float shadow = MainLightRealtimeShadow(shadowCoord);
-                    shadow = lerp(0.25, 1.0, shadow); // soften shadow
+                    shadow = lerp(0.25, 1.0, shadow);
 
                     float3 ambient = float3(0.1, 0.1, 0.1);
                     float3 lit = surfaceColor * (_MainLightColor.rgb * halfLambert * shadow + ambient);
@@ -159,8 +132,6 @@ Shader "Custom/SeismicShader"
             HLSLPROGRAM
             #pragma target 5.0
             #pragma vertex vert
-            #pragma hull hull
-            #pragma domain domainShadow
             #pragma fragment fragShadow
             #pragma shader_feature _ SEISMIC_DISPLACEMENT
 
@@ -170,35 +141,14 @@ Shader "Custom/SeismicShader"
 
             struct ShadowVaryings { float4 positionCS : SV_POSITION; };
 
-            ControlPoint vert(Appdata v)
-            {
-                ControlPoint o;
-                o.vertex = v.vertex;
-                o.normal = v.normal;
-                o.uv = v.uv;
-                return o;
-            }
-
-            [domain("tri")]
-            [partitioning("integer")]
-            [outputtopology("triangle_cw")]
-            [outputcontrolpoints(3)]
-            [patchconstantfunc("PatchConstants")]
-            ControlPoint hull(InputPatch<ControlPoint, 3> patch, uint i : SV_OutputControlPointID)
-            {
-                return patch[i];
-            }
-
-            [domain("tri")]
-            ShadowVaryings domainShadow(PatchConstant p, const OutputPatch<ControlPoint, 3> patch, float3 bary : SV_DomainLocation)
+            ShadowVaryings vert(Appdata v)
             {
                 ShadowVaryings o;
-                float3 pos = BarycentricInterpolate(
-                    patch[0].vertex.xyz, patch[1].vertex.xyz, patch[2].vertex.xyz, bary);
-                float3 normal = normalize(BarycentricInterpolate(
-                    patch[0].normal, patch[1].normal, patch[2].normal, bary));
 
+                float3 pos = v.vertex.xyz;
+                float3 normal = normalize(v.normal);
                 float3 worldPos = TransformObjectToWorld(pos);
+
                 #if defined(SEISMIC_DISPLACEMENT)
                     float3 worldNormal = normalize(TransformObjectToWorldNormal(normal));
                     float height = GetWaveOffsetAt(worldPos);
