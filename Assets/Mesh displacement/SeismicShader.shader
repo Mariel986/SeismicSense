@@ -43,7 +43,6 @@ Shader "Custom/SeismicShader"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Seismic.hlsl"
 
-            // Vertex shader: pass data to control points
             ControlPoint vert(Appdata v)
             {
                 ControlPoint o;
@@ -53,7 +52,6 @@ Shader "Custom/SeismicShader"
                 return o;
             }
 
-            // Hull shader: standard passthrough with patch constants
             [domain("tri")]
             [partitioning("integer")]
             [outputtopology("triangle_cw")]
@@ -64,23 +62,17 @@ Shader "Custom/SeismicShader"
                 return patch[i];
             }
 
-            // Domain shader: calculate displaced world position
             [domain("tri")]
             Interpolators domain(PatchConstant p, const OutputPatch<ControlPoint, 3> patch, float3 bary : SV_DomainLocation)
             {
                 Interpolators o;
 
                 float3 pos = BarycentricInterpolate(
-                    patch[0].vertex.xyz, patch[1].vertex.xyz, patch[2].vertex.xyz, bary
-                );
-
+                    patch[0].vertex.xyz, patch[1].vertex.xyz, patch[2].vertex.xyz, bary);
                 float3 normal = normalize(BarycentricInterpolate(
-                    patch[0].normal, patch[1].normal, patch[2].normal, bary
-                ));
-
+                    patch[0].normal, patch[1].normal, patch[2].normal, bary));
                 float2 uv = BarycentricInterpolate(
-                    patch[0].uv, patch[1].uv, patch[2].uv, bary
-                );
+                    patch[0].uv, patch[1].uv, patch[2].uv, bary);
 
                 float3 worldPos = TransformObjectToWorld(pos);
                 float3 worldNormal = normalize(TransformObjectToWorldNormal(normal));
@@ -88,23 +80,20 @@ Shader "Custom/SeismicShader"
                 #if defined(SEISMIC_DISPLACEMENT)
                     float height = GetWaveOffsetAt(worldPos);
                     float3 displaced = worldPos + worldNormal * height;
-
                     o.vertex = TransformWorldToHClip(displaced);
                     o.worldPos = displaced;
                     o.offset = displaced - worldPos;
-                    o.normal = worldNormal;
                 #else
                     o.vertex = TransformWorldToHClip(worldPos);
                     o.worldPos = worldPos;
                     o.offset = float3(0, 0, 0);
-                    o.normal = worldNormal;
                 #endif
 
+                o.normal = worldNormal;
                 o.uv = TRANSFORM_TEX(uv, _MainTex);
                 return o;
             }
 
-            // Fragment shader: perform color blending and lighting
             float4 frag(Interpolators i) : SV_Target
             {
                 float4 col = _MainColor;
@@ -130,26 +119,29 @@ Shader "Custom/SeismicShader"
                 #if defined(SEISMIC_LIGHTING)
                     float2 grad = GetWaveGradientAt(basePos);
 
-                    float3 normal = normalize(cross(
-                        float3(0, grad.y, 1),
-                        float3(1, grad.x, 0)
-                    ));
+                    float3 dX = float3(1, grad.x, 0);
+                    float3 dZ = float3(0, grad.y, 1);
+
+                    float3 slopeNormal = normalize(cross(dZ, dX));
+                    float3 normal = normalize(lerp(i.normal, slopeNormal, 0.85)); // Blend with geometric normal
+
 
                     float3 lightDir = normalize(GetMainLight().direction);
-                    float NdotL = dot(normal, lightDir);
+                    float NdotL = max(0.0, dot(normal, lightDir));
                     float halfLambert = NdotL * 0.5 + 0.5;
 
                     float3 surfaceColor = tex2D(_MainTex, i.uv).rgb;
-                    //float shadow = 1.0f; 
                     float4 shadowCoord = TransformWorldToShadowCoord(i.worldPos);
                     float shadow = MainLightRealtimeShadow(shadowCoord);
+                    shadow = lerp(0.25, 1.0, shadow); // soften shadow
 
+                    float3 ambient = float3(0.1, 0.1, 0.1);
+                    float3 lit = surfaceColor * (_MainLightColor.rgb * halfLambert * shadow + ambient);
 
-                    float3 lit = surfaceColor * _MainLightColor.rgb * halfLambert * shadow;
                     return float4(lit, col.a);
                 #else
                     #if defined(SEISMIC_TRANSPARENT)
-                    if (col.a < 0.02f) discard;
+                        if (col.a < 0.02f) discard;
                     #endif
                     return col;
                 #endif
@@ -162,28 +154,21 @@ Shader "Custom/SeismicShader"
         {
             Name "ShadowCaster"
             Tags { "LightMode" = "ShadowCaster" }
-
             Cull Off
 
             HLSLPROGRAM
-
             #pragma target 5.0
-
             #pragma vertex vert
             #pragma hull hull
             #pragma domain domainShadow
             #pragma fragment fragShadow
-
             #pragma shader_feature _ SEISMIC_DISPLACEMENT
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
             #include "Seismic.hlsl"
 
-            struct ShadowVaryings
-            {
-                float4 positionCS : SV_POSITION;
-            };
+            struct ShadowVaryings { float4 positionCS : SV_POSITION; };
 
             ControlPoint vert(Appdata v)
             {
@@ -208,22 +193,17 @@ Shader "Custom/SeismicShader"
             ShadowVaryings domainShadow(PatchConstant p, const OutputPatch<ControlPoint, 3> patch, float3 bary : SV_DomainLocation)
             {
                 ShadowVaryings o;
-
                 float3 pos = BarycentricInterpolate(
-                    patch[0].vertex.xyz, patch[1].vertex.xyz, patch[2].vertex.xyz, bary
-                );
-
+                    patch[0].vertex.xyz, patch[1].vertex.xyz, patch[2].vertex.xyz, bary);
                 float3 normal = normalize(BarycentricInterpolate(
-                    patch[0].normal, patch[1].normal, patch[2].normal, bary
-                ));
+                    patch[0].normal, patch[1].normal, patch[2].normal, bary));
 
                 float3 worldPos = TransformObjectToWorld(pos);
-
-            #if defined(SEISMIC_DISPLACEMENT)
-                float3 worldNormal = normalize(TransformObjectToWorldNormal(normal));
-                float height = GetWaveOffsetAt(worldPos);
-                worldPos += worldNormal * height;
-            #endif
+                #if defined(SEISMIC_DISPLACEMENT)
+                    float3 worldNormal = normalize(TransformObjectToWorldNormal(normal));
+                    float height = GetWaveOffsetAt(worldPos);
+                    worldPos += worldNormal * height;
+                #endif
 
                 o.positionCS = TransformWorldToHClip(worldPos);
                 return o;

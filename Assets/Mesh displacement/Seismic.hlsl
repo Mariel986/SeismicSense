@@ -84,11 +84,17 @@ float GetWaveOffsetAt(float3 pos)
 
 float2 GetWaveGradientAt(float3 pos)
 {
-    float eps = 0.05;
-    float h = GetWaveOffsetAt(pos);
-    float hx = GetWaveOffsetAt(pos + float3(eps, 0, 0));
-    float hz = GetWaveOffsetAt(pos + float3(0, 0, eps));
-    return float2((hx - h) / eps, (hz - h) / eps);
+    float eps = 0.01;
+
+    float hx1 = GetWaveOffsetAt(pos + float3(eps, 0, 0));
+    float hx2 = GetWaveOffsetAt(pos - float3(eps, 0, 0));
+    float hz1 = GetWaveOffsetAt(pos + float3(0, 0, eps));
+    float hz2 = GetWaveOffsetAt(pos - float3(0, 0, eps));
+
+    float dhdx = (hx1 - hx2) / (2.0 * eps);
+    float dhdz = (hz1 - hz2) / (2.0 * eps);
+
+    return float2(dhdx, dhdz);
 }
 
 // Tessellation helper
