@@ -30,7 +30,6 @@ struct Interpolators
     float3 worldPos : TEXCOORD1;
     float3 offset : TEXCOORD2;
     float3 normal : TEXCOORD3;
-    float4 shadowCoord : TEXCOORD4;
 };
 
 CBUFFER_START(UnityPerMaterial)

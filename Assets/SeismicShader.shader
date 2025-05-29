@@ -101,7 +101,6 @@ Shader "Custom/SeismicShader"
                 #endif
 
                 o.uv = TRANSFORM_TEX(uv, _MainTex);
-                o.shadowCoord = TransformWorldToShadowCoord(o.worldPos);
                 return o;
             }
 
@@ -141,8 +140,10 @@ Shader "Custom/SeismicShader"
                     float halfLambert = NdotL * 0.5 + 0.5;
 
                     float3 surfaceColor = tex2D(_MainTex, i.uv).rgb;
-                    float shadow = 1.0f; 
-                    //float shadow = MainLightRealtimeShadow(i.shadowCoord);
+                    //float shadow = 1.0f; 
+                    float4 shadowCoord = TransformWorldToShadowCoord(i.worldPos);
+                    float shadow = MainLightRealtimeShadow(shadowCoord);
+
 
                     float3 lit = surfaceColor * _MainLightColor.rgb * halfLambert * shadow;
                     return float4(lit, col.a);
@@ -184,6 +185,25 @@ Shader "Custom/SeismicShader"
                 float4 positionCS : SV_POSITION;
             };
 
+            ControlPoint vert(Appdata v)
+            {
+                ControlPoint o;
+                o.vertex = v.vertex;
+                o.normal = v.normal;
+                o.uv = v.uv;
+                return o;
+            }
+
+            [domain("tri")]
+            [partitioning("integer")]
+            [outputtopology("triangle_cw")]
+            [outputcontrolpoints(3)]
+            [patchconstantfunc("PatchConstants")]
+            ControlPoint hull(InputPatch<ControlPoint, 3> patch, uint i : SV_OutputControlPointID)
+            {
+                return patch[i];
+            }
+
             [domain("tri")]
             ShadowVaryings domainShadow(PatchConstant p, const OutputPatch<ControlPoint, 3> patch, float3 bary : SV_DomainLocation)
             {
@@ -192,17 +212,18 @@ Shader "Custom/SeismicShader"
                 float3 pos = BarycentricInterpolate(
                     patch[0].vertex.xyz, patch[1].vertex.xyz, patch[2].vertex.xyz, bary
                 );
+
                 float3 normal = normalize(BarycentricInterpolate(
                     patch[0].normal, patch[1].normal, patch[2].normal, bary
                 ));
 
                 float3 worldPos = TransformObjectToWorld(pos);
 
-                #if defined(SEISMIC_DISPLACEMENT)
-                    float3 worldNormal = normalize(TransformObjectToWorldNormal(normal));
-                    float height = GetWaveOffsetAt(worldPos);
-                    worldPos += worldNormal * height;
-                #endif
+            #if defined(SEISMIC_DISPLACEMENT)
+                float3 worldNormal = normalize(TransformObjectToWorldNormal(normal));
+                float height = GetWaveOffsetAt(worldPos);
+                worldPos += worldNormal * height;
+            #endif
 
                 o.positionCS = TransformWorldToHClip(worldPos);
                 return o;
